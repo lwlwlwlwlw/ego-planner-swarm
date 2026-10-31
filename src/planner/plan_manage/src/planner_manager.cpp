@@ -1,5 +1,6 @@
 // #include <fstream>
 #include <plan_manage/planner_manager.h>
+#include <plan_manage/benchmark_timing.h>
 #include <thread>
 #include "visualization_msgs/Marker.h" // zx-todo
 
@@ -266,20 +267,29 @@ namespace ego_planner
 
       t_opt = ros::Time::now() - t_start;
 
-      visualization_->displayMultiInitPathList(vis_trajs, 0.2); // This visuallization will take up several milliseconds.
+      {
+        benchmark::ExcludeVisualization exclude_rendering;
+        visualization_->displayMultiInitPathList(vis_trajs, 0.2); // This visuallization will take up several milliseconds.
+      }
     }
     else
     {
       flag_step_1_success = bspline_optimizer_->BsplineOptimizeTrajRebound(ctrl_pts, ts);
       t_opt = ros::Time::now() - t_start;
       //static int vis_id = 0;
-      visualization_->displayInitPathList(point_set, 0.2, 0);
+      {
+        benchmark::ExcludeVisualization exclude_rendering;
+        visualization_->displayInitPathList(point_set, 0.2, 0);
+      }
     }
 
     cout << "plan_success=" << flag_step_1_success << endl;
     if (!flag_step_1_success)
     {
-      visualization_->displayOptimalList(ctrl_pts, 0);
+      {
+        benchmark::ExcludeVisualization exclude_rendering;
+        visualization_->displayOptimalList(ctrl_pts, 0);
+      }
       continous_failures_count_++;
       return false;
     }
@@ -354,7 +364,7 @@ namespace ego_planner
 
   bool EGOPlannerManager::checkCollision(int drone_id)
   {
-    if (local_data_.start_time_.toSec() < 1e9) // It means my first planning has not started
+    if (local_data_.traj_id_ <= 0) // No local trajectory has been generated yet.
       return false;
 
     double my_traj_start_time = local_data_.start_time_.toSec();

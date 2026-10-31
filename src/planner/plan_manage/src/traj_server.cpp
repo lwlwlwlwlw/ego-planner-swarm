@@ -70,6 +70,14 @@ void bsplineCallback(traj_utils::BsplineConstPtr msg)
 
 std::pair<double, double> calculate_yaw(double t_cur, Eigen::Vector3d &pos, ros::Time &time_now, ros::Time &time_last)
 {
+  // The first sample, or two callbacks on one simulation tick, has no elapsed
+  // time. Dividing by zero here poisons the yaw-rate filter for the whole flight.
+  if (time_now <= time_last)
+  {
+    last_yaw_dot_ = 0.0;
+    return std::make_pair(last_yaw_, 0.0);
+  }
+
   constexpr double PI = 3.1415926;
   constexpr double YAW_DOT_MAX_PER_SEC = PI;
   // constexpr double YAW_DOT_DOT_MAX_PER_SEC = PI;

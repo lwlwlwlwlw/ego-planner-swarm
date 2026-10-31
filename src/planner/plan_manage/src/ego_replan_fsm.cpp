@@ -1,5 +1,6 @@
 
 #include <plan_manage/ego_replan_fsm.h>
+#include <plan_manage/benchmark_timing.h>
 
 namespace ego_planner
 {
@@ -158,7 +159,14 @@ namespace ego_planner
   void EGOReplanFSM::planNextWaypoint(const Eigen::Vector3d next_wp)
   {
     bool success = false;
-    success = planner_manager_->planGlobalTraj(odom_pos_, odom_vel_, Eigen::Vector3d::Zero(), next_wp, Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero());
+    {
+      benchmark::DecisionTiming target_setup(
+          planner_manager_->pp_.drone_id, [] { return ros::Time::now().toSec(); },
+          have_trigger_ ? benchmark::RecordType::TargetSetup : benchmark::RecordType::WarmupTargetSetup);
+      success = planner_manager_->planGlobalTraj(odom_pos_, odom_vel_, Eigen::Vector3d::Zero(), next_wp, Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero());
+      if (success)
+        target_setup.setSuccess();
+    }
 
     // visualization_->displayGoalPoint(next_wp, Eigen::Vector4d(0, 0.5, 0.5, 1), 0.3, 0);
 
@@ -617,6 +625,8 @@ namespace ego_planner
 
   bool EGOReplanFSM::planFromGlobalTraj(const int trial_times /*=1*/) //zx-todo
   {
+    benchmark::DecisionTiming decision_timing(
+        planner_manager_->pp_.drone_id, [] { return ros::Time::now().toSec(); });
     start_pt_ = odom_pos_;
     start_vel_ = odom_vel_;
     start_acc_.setZero();
@@ -631,6 +641,7 @@ namespace ego_planner
     {
       if (callReboundReplan(true, flag_random_poly_init))
       {
+        decision_timing.setSuccess();
         return true;
       }
     }
@@ -639,6 +650,8 @@ namespace ego_planner
 
   bool EGOReplanFSM::planFromCurrentTraj(const int trial_times /*=1*/)
   {
+    benchmark::DecisionTiming decision_timing(
+        planner_manager_->pp_.drone_id, [] { return ros::Time::now().toSec(); });
 
     LocalTrajData *info = &planner_manager_->local_data_;
     ros::Time time_now = ros::Time::now();
@@ -671,6 +684,7 @@ namespace ego_planner
       }
     }
 
+    decision_timing.setSuccess();
     return true;
   }
 
@@ -798,7 +812,10 @@ namespace ego_planner
       /* 2. publish traj to the next drone of swarm */
 
       /* 3. publish traj for visualization */
-      visualization_->displayOptimalList(info->position_traj_.get_control_points(), 0);
+      {
+        benchmark::ExcludeVisualization exclude_rendering;
+        visualization_->displayOptimalList(info->position_traj_.get_control_points(), 0);
+      }
     }
 
     return plan_and_refine_success;
